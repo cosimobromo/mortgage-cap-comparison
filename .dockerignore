@@ -1,0 +1,11 @@
+# Exclude the .env file
+**/*.env
+
+# Exclude Python cache files
+**/__pycache__/
+*.pyc
+
+# Exclude any other files or directories
+.git/
+node_modules/
+logs/
