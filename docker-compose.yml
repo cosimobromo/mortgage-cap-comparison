@@ -5,8 +5,8 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    image: simulazione-mutuo-pac:latest
-    container_name: simulatore_mutuo_pac
+    image: mortgage-cap-simulator:latest
+    container_name: mortgage_cap_simulator
     ports:
       - "8501:8501"
     restart: unless-stopped

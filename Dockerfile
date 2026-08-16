@@ -1,22 +1,22 @@
 FROM python:3.14-slim
 
-# Evita che Python scriva file .pyc e forza l'output senza buffer per i log
+# Prevents Python from writing .pyc files and forces unbuffered output for logs
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
 
-# Imposta la cartella di lavoro all'interno del container
+# Set working directory inside the container
 WORKDIR /app
 
-# Copia prima solo il file delle dipendenze (sfrutta la cache dei layer Docker)
+# Copy dependencies file first (leverages Docker layer caching)
 COPY requirements.txt .
 
-# Installa le librerie Python
+# Install Python libraries
 RUN pip install --no-cache-dir --upgrade -r requirements.txt
 
 COPY ./app /app
 
-# Espone la porta di default di Streamlit
+# Expose Streamlit default port
 EXPOSE 8501
 
-# Comando per avviare Streamlit disabilitando il CORS e l'indirizzo headless
+# Command to start Streamlit with CORS disabled and headless address
 CMD ["streamlit", "run", "main.py", "--server.port=8501", "--server.address=0.0.0.0"]
