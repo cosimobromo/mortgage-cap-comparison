@@ -21,9 +21,9 @@ st.markdown("Analysis of the convenience of early mortgage prepayment vs investi
 
 # 2. SIDEBAR - INPUT PARAMETERS
 st.sidebar.header("1. Current Mortgage Data")
-capitale_residuo = st.sidebar.number_input("Remaining Capital (€)", min_value=1000, value=150000, step=5000)
-tasso_mutuo_annuo = st.sidebar.slider("Annual Mortgage Rate (%)", min_value=0.1, max_value=10.0, value=3.5, step=0.05) / 100
-anni_residui = st.sidebar.slider("Remaining Years", min_value=1, max_value=40, value=30, step=1)
+residual_capital = st.sidebar.number_input("Remaining Capital (€)", min_value=1000, value=150000, step=5000)
+year_mortgage_tax = st.sidebar.slider("Annual Mortgage Rate (%)", min_value=0.1, max_value=10.0, value=3.5, step=0.05) / 100
+residual_years = st.sidebar.slider("Remaining Years", min_value=1, max_value=40, value=30, step=1)
 
 st.sidebar.header("2. Extra Capital Investment")
 df = pd.DataFrame(
@@ -31,13 +31,13 @@ df = pd.DataFrame(
         {"Extra Available Capital (€)": 10000, "Months from start of mortgage": 12},
     ]
 )
-capitale_extra_df = st.sidebar.data_editor(df, num_rows="dynamic", width = "stretch", column_config={
+extra_capital_df = st.sidebar.data_editor(df, num_rows="dynamic", width = "stretch", column_config={
         # 1. Month Format: Pure Integer
         "Months from start of mortgage": st.column_config.NumberColumn(
             "Payment Month",
             help="Progressive month number (1-360)",
             min_value=1,
-            max_value=anni_residui*12,
+            max_value=residual_years*12,
             step=1,
             format="%d",
             required=True
@@ -46,68 +46,65 @@ capitale_extra_df = st.sidebar.data_editor(df, num_rows="dynamic", width = "stre
             "Capital to invest",
             help="Capital you decide to invest",
             min_value=1,
-            max_value=capitale_residuo,
+            max_value=residual_capital,
             step=1,
             format="€ %,d",
             required=True
         )})
 
-simulato_rendimento_pac_annuo = st.sidebar.slider("Expected Annual CAP Return (%)", min_value=0.0, max_value=12.0, value=5.0, step=0.5) / 100
-reinvestimento_risparmio_rata = st.sidebar.checkbox("Reinvest payment savings in CAP", value = False)
+simulated_year_cap_tax = st.sidebar.slider("Expected Annual CAP Return (%)", min_value=0.0, max_value=12.0, value=5.0, step=0.5) / 100
 
 # 3. CALCULATION ENGINE
-mesi_residui = anni_residui * 12
-tasso_m = tasso_mutuo_annuo / 12
-tasso_pac_m = simulato_rendimento_pac_annuo / 12
-capitale_investito = 0
+residual_months = residual_years * 12
+monthly_mortgage_tax = year_mortgage_tax / 12
+monthly_pac_tax = simulated_year_cap_tax / 12
+invested_capital = 0
 
-mesi = np.arange(1, mesi_residui + 1, 1)
+months = np.arange(1, residual_months + 1, 1)
 
-rata_base = npf.pmt(tasso_m, mesi_residui, -capitale_residuo)
-interessi_base = rata_base * mesi_residui - capitale_residuo
-rata = rata_base  # Initial mortgage payment
-simulazione_mutuo = []
-simulazione_pac = []
+base_payment = npf.pmt(monthly_mortgage_tax, residual_months, -residual_capital)
+base_interests = base_payment * residual_months - residual_capital
+rata = base_payment  # Initial mortgage payment
+mortgage_simulation = []
+cap_simulation = []
 
 # Simulazione scenario 
-for m in mesi:
-    quota_interessi = capitale_residuo * tasso_m 
+for m in months:
+    quota_interessi = residual_capital * monthly_mortgage_tax 
     quota_capitale = rata - quota_interessi
-    capitale_residuo -= quota_capitale
+    residual_capital -= quota_capitale
 
-    if reinvestimento_risparmio_rata: 
-            capitale_investito += rata_base - rata 
-    capitale_investito = capitale_investito * (1+tasso_pac_m) 
+    invested_capital = invested_capital * (1+monthly_pac_tax) 
 
-    simulazione_mutuo.append({"Month": m, "Payment": rata, "Interest Payment": quota_interessi, "Principal Payment": quota_capitale, "Remaining Capital": max(0, capitale_residuo)})
-    simulazione_pac.append({"Month": m, "CAP Capital": capitale_investito})
-    if m in capitale_extra_df["Months from start of mortgage"].values:
-        capitale_extra = capitale_extra_df.loc[capitale_extra_df["Months from start of mortgage"] == m, "Extra Available Capital (€)"].values[0]
-        capitale_residuo = max(0, capitale_residuo - capitale_extra)
-        capitale_investito += capitale_extra
-        mesi_residui -= m
-        rata = npf.pmt(tasso_m, mesi_residui, -capitale_residuo)
+    mortgage_simulation.append({"Month": m, "Payment": rata, "Interest Payment": quota_interessi, "Principal Payment": quota_capitale, "Remaining Capital": max(0, residual_capital)})
+    cap_simulation.append({"Month": m, "CAP Capital": invested_capital})
+    if m in extra_capital_df["Months from start of mortgage"].values:
+        capitale_extra = extra_capital_df.loc[extra_capital_df["Months from start of mortgage"] == m, "Extra Available Capital (€)"].values[0]
+        residual_capital = max(0, residual_capital - capitale_extra)
+        invested_capital += capitale_extra
+        residual_months = residual_years * 12 - m
+        rata = npf.pmt(monthly_mortgage_tax, residual_months, -residual_capital)
 
-    if capitale_residuo <= 0:
+    if residual_capital <= 0:
         break
 
 
-simulazione_mutuo_df = pd.DataFrame(simulazione_mutuo)
-simulazione_mutuo_df["Cumulative Interest"] = simulazione_mutuo_df["Interest Payment"].cumsum()
-simulazione_pac_df = pd.DataFrame(simulazione_pac)
+mortgage_simulation_df = pd.DataFrame(mortgage_simulation)
+mortgage_simulation_df["Cumulative Interest"] = mortgage_simulation_df["Interest Payment"].cumsum()
+cap_simulation_df = pd.DataFrame(cap_simulation)
 
-df_confronto = pd.merge(simulazione_mutuo_df, simulazione_pac_df, on="Month")
-df_confronto["Difference (CAP - Interest)"] = df_confronto["CAP Capital"] - df_confronto["Cumulative Interest"]
+comparison_df = pd.merge(mortgage_simulation_df, cap_simulation_df, on="Month")
+comparison_df["Difference (CAP - Interest)"] = comparison_df["CAP Capital"] - comparison_df["Cumulative Interest"]
 
-interessi_totali = simulazione_mutuo_df["Interest Payment"].sum()
-valore_finale_investimento = simulazione_pac_df.iloc[-1]["CAP Capital"]
+total_interests = mortgage_simulation_df["Interest Payment"].sum()
+final_cap_value = cap_simulation_df.iloc[-1]["CAP Capital"]
 
 # 4. KEY METRICS
 col1, col2, col3 = st.columns(3)
 
-col1.metric("Total Interest", f"€ {interessi_totali:,.2f}", delta = f"- € {interessi_base-interessi_totali:,.2f}")
-col2.metric("Mortgage Payoff Months", f"{m}", delta=f"{anni_residui*12-m}")
-col3.metric("Final CAP Assets", f"€ {valore_finale_investimento:,.2f}", delta = f"€ {valore_finale_investimento-capitale_extra_df["Extra Available Capital (€)"].sum():,.2f}")
+col1.metric("Total Interest", f"€ {total_interests:,.2f}", delta = f"- € {base_interests-total_interests:,.2f}")
+col2.metric("Mortgage Payoff Months", f"{m}", delta=f"{residual_years*12-m}")
+col3.metric("Final CAP Assets", f"€ {final_cap_value:,.2f}", delta = f"€ {final_cap_value-extra_capital_df["Extra Available Capital (€)"].sum():,.2f}")
 
 
 st.divider()
@@ -128,8 +125,8 @@ with tab_graf1:
     
     fig1.add_trace(
         go.Scatter(
-            x=df_confronto["Month"],
-            y=df_confronto["Remaining Capital"],
+            x=comparison_df["Month"],
+            y=comparison_df["Remaining Capital"],
             name="Remaining Capital (€)",
             line=dict(color="#1f77b4", width=3),
         )
@@ -137,8 +134,8 @@ with tab_graf1:
 
     fig1.add_trace(
         go.Scatter(
-            x=df_confronto["Month"],
-            y=df_confronto["Cumulative Interest"],
+            x=comparison_df["Month"],
+            y=comparison_df["Cumulative Interest"],
             name="Cumulative Interest (€)",
             line=dict(color="#d62728", width=3, dash="dot"),
         )
@@ -169,8 +166,8 @@ with tab_graf2:
     fig2 = go.Figure()
     fig2.add_trace(
         go.Scatter(
-            x=df_confronto["Month"], 
-            y=df_confronto["CAP Capital"], 
+            x=comparison_df["Month"], 
+            y=comparison_df["CAP Capital"], 
             name="CAP Value (€)",
             fill='tozeroy',
             line=dict(color="#2ca02c", width=3)
@@ -194,8 +191,8 @@ with tab_graf3:
     # Net difference line trace
     fig3.add_trace(
         go.Scatter(
-            x=df_confronto["Month"], 
-            y=df_confronto["Difference (CAP - Interest)"], 
+            x=comparison_df["Month"], 
+            y=comparison_df["Difference (CAP - Interest)"], 
             name="Net Difference (€)",
             line=dict(color="#ff7f0e", width=3)
         )
@@ -219,7 +216,7 @@ with tab_dati:
         
         buffer_mutuo = io.BytesIO()
         with pd.ExcelWriter(buffer_mutuo, engine='openpyxl') as writer:
-            simulazione_mutuo_df.to_excel(writer, index=False, sheet_name='Amortization')
+            mortgage_simulation_df.to_excel(writer, index=False, sheet_name='Amortization')
         buffer_mutuo.seek(0)
         
         # Download Mortgage Button
@@ -232,7 +229,7 @@ with tab_dati:
         )
 
         st.dataframe(
-            simulazione_mutuo_df, 
+            mortgage_simulation_df, 
             hide_index=True,
             width="stretch",
             column_config={
@@ -249,7 +246,7 @@ with tab_dati:
 
         buffer_pac = io.BytesIO()
         with pd.ExcelWriter(buffer_pac, engine='openpyxl') as writer:
-            simulazione_pac_df.to_excel(writer, index=False, sheet_name='CAP')
+            cap_simulation_df.to_excel(writer, index=False, sheet_name='CAP')
         buffer_pac.seek(0)
         
         # Download CAP Button
@@ -262,7 +259,7 @@ with tab_dati:
         )
 
         st.dataframe(
-            simulazione_pac_df, 
+            cap_simulation_df, 
             hide_index=True,
             width="stretch",
             column_config={
